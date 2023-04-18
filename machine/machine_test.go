@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime/pprof"
 	"syscall"
 	"testing"
 	"time"
@@ -92,6 +93,39 @@ func testNewAndLoadLinux(t *testing.T, kernel, tap, guestIPv4, hostIPv4, prefixL
 
 	if string(output) != "index.html: this message is from /dev/vda in guest\n" {
 		t.Fatal(string(output))
+	}
+}
+
+func BenchmarkNewAndLoadLinuxWithBZimage(b *testing.B) {
+	cpuProfile, err := os.Create("../example-cpu.prof")
+	if err != nil {
+		b.Fatal(err)
+	}
+	pprof.StartCPUProfile(cpuProfile)
+	defer pprof.StopCPUProfile()
+	for i := 0; i < b.N; i++ {
+		m, err := machine.New("/dev/kvm", 1, 1<<29)
+		if err != nil {
+			b.Fatal(err)
+		}
+		param := fmt.Sprintf(`console=ttyS0 earlyprintk=serial noapic noacpi notsc ` +
+			`lapic tsc_early_khz=2000 pci=realloc=off virtio_pci.force_legacy=1` +
+			`rdinit=/init init=/init`)
+		kern, err := os.Open("../bzImage")
+		if err != nil {
+			b.Fatal(err)
+		}
+		initrd, err := os.Open("../initrd")
+		if err != nil {
+			b.Fatal(err)
+		}
+		if err = m.LoadLinux(kern, initrd, param); err != nil {
+			b.Fatal(err)
+		}
+		go func() {
+
+		}()
+		time.Sleep(10 * time.Second)
 	}
 }
 
